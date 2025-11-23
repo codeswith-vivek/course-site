@@ -17,6 +17,58 @@ interface UserDashboardProps {
   onLogout: () => void;
 }
 
+interface CourseCardProps {
+  folder: CourseFolder;
+  locked?: boolean;
+  percent: number;
+  onClick: (folder: CourseFolder) => void;
+}
+
+const CourseCard: React.FC<CourseCardProps> = ({ folder, locked, percent, onClick }) => {
+  return (
+    <div 
+        onClick={() => onClick(folder)}
+        className={`group bg-white rounded-2xl p-6 shadow-[0_10px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer border border-slate-100 transform hover:-translate-y-2 relative overflow-hidden flex flex-col ${locked ? 'opacity-75 grayscale-[0.5] hover:grayscale-0' : ''}`}
+    >
+            <div className={`absolute top-0 right-0 w-24 h-24 rounded-full transform translate-x-12 -translate-y-12 opacity-10 group-hover:scale-150 transition-transform duration-500 ${locked ? 'bg-slate-500' : 'bg-indigo-600'}`}></div>
+            
+            <div className="relative z-10 flex-1">
+            <div className="flex justify-between items-start mb-4">
+                <div className={`p-4 rounded-2xl inline-block transition-colors duration-300 ${locked ? 'bg-slate-100 text-slate-500' : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white'}`}>
+                    {locked ? <Lock className="h-8 w-8" /> : <Folder className="h-8 w-8" />}
+                </div>
+                {!locked && (
+                    <div className="text-right">
+                        <div className="text-2xl font-bold text-slate-800">{percent}%</div>
+                        <div className="text-[10px] uppercase font-bold text-slate-400">Complete</div>
+                    </div>
+                )}
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">{folder.name}</h3>
+            <p className="text-slate-500 text-sm line-clamp-2 mb-4">{folder.description}</p>
+            
+            {!locked && (
+                <div className="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
+                    <div 
+                        className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-500" 
+                        style={{ width: `${percent}%` }}
+                    ></div>
+                </div>
+            )}
+            </div>
+            
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 relative z-10">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                {folder.resources.length} Resources
+            </span>
+            <span className={`flex items-center text-sm font-bold group-hover:translate-x-1 transition-transform ${locked ? 'text-slate-500' : 'text-indigo-600'}`}>
+                {locked ? 'Locked' : 'Open'} <ChevronRight className="h-4 w-4 ml-1" />
+            </span>
+        </div>
+    </div>
+  );
+};
+
 const UserDashboard: React.FC<UserDashboardProps> = ({ 
   user, 
   folders, 
@@ -139,52 +191,6 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       );
   };
 
-  const CourseCard = ({ folder, locked }: { folder: CourseFolder, locked?: boolean }) => {
-      const percent = getFolderProgress(folder);
-      return (
-        <div 
-            onClick={() => handleFolderClick(folder)}
-            className={`group bg-white rounded-2xl p-6 shadow-[0_10px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_20px_40px_rgba(0,0,0,0.1)] transition-all duration-300 cursor-pointer border border-slate-100 transform hover:-translate-y-2 relative overflow-hidden flex flex-col ${locked ? 'opacity-75 grayscale-[0.5] hover:grayscale-0' : ''}`}
-        >
-                <div className={`absolute top-0 right-0 w-24 h-24 rounded-full transform translate-x-12 -translate-y-12 opacity-10 group-hover:scale-150 transition-transform duration-500 ${locked ? 'bg-slate-500' : 'bg-indigo-600'}`}></div>
-                
-                <div className="relative z-10 flex-1">
-                <div className="flex justify-between items-start mb-4">
-                    <div className={`p-4 rounded-2xl inline-block transition-colors duration-300 ${locked ? 'bg-slate-100 text-slate-500' : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white'}`}>
-                        {locked ? <Lock className="h-8 w-8" /> : <Folder className="h-8 w-8" />}
-                    </div>
-                    {!locked && (
-                        <div className="text-right">
-                            <div className="text-2xl font-bold text-slate-800">{percent}%</div>
-                            <div className="text-[10px] uppercase font-bold text-slate-400">Complete</div>
-                        </div>
-                    )}
-                </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2">{folder.name}</h3>
-                <p className="text-slate-500 text-sm line-clamp-2 mb-4">{folder.description}</p>
-                
-                {!locked && (
-                    <div className="w-full bg-slate-100 rounded-full h-2 mb-4 overflow-hidden">
-                        <div 
-                            className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-500" 
-                            style={{ width: `${percent}%` }}
-                        ></div>
-                    </div>
-                )}
-                </div>
-                
-                <div className="flex items-center justify-between pt-4 border-t border-slate-100 relative z-10">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    {folder.resources.length} Resources
-                </span>
-                <span className={`flex items-center text-sm font-bold group-hover:translate-x-1 transition-transform ${locked ? 'text-slate-500' : 'text-indigo-600'}`}>
-                    {locked ? 'Locked' : 'Open'} <ChevronRight className="h-4 w-4 ml-1" />
-                </span>
-            </div>
-        </div>
-      );
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans relative">
       
@@ -292,7 +298,12 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {myCourses.map((folder) => (
-                                <CourseCard key={folder.id} folder={folder} />
+                                <CourseCard 
+                                    key={folder.id} 
+                                    folder={folder} 
+                                    percent={getFolderProgress(folder)}
+                                    onClick={handleFolderClick}
+                                />
                             ))}
                         </div>
                     )}
@@ -319,6 +330,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                     key={`all-${folder.id}`} 
                                     folder={folder} 
                                     locked={true} 
+                                    percent={getFolderProgress(folder)}
+                                    onClick={handleFolderClick}
                                 />
                             ))}
                         </div>
