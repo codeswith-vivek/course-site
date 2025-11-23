@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
@@ -22,12 +21,18 @@ const App: React.FC = () => {
   // Initialization & Subscriptions
   useEffect(() => {
       const init = async () => {
-          await DB.initializeDatabase();
-          setIsLoading(false);
+          try {
+            await DB.initializeDatabase();
+          } catch (e) {
+            console.error("DB Init failed", e);
+          }
       };
       init();
 
-      const unsubUsers = DB.subscribeToUsers(setUsers);
+      const unsubUsers = DB.subscribeToUsers((fetchedUsers) => {
+          setUsers(fetchedUsers);
+      });
+      
       const unsubFolders = DB.subscribeToFolders(setFolders);
       const unsubComments = DB.subscribeToComments(setComments);
       const unsubProgress = DB.subscribeToProgress(setProgress);
@@ -42,16 +47,59 @@ const App: React.FC = () => {
       };
   }, []);
 
+  // Safety Timeout: Force loading to stop after 4 seconds if DB is slow
+  useEffect(() => {
+      const timer = setTimeout(() => {
+          if (isLoading) {
+              console.log("Forcing load completion after timeout");
+              setIsLoading(false);
+          }
+      }, 4000);
+      return () => clearTimeout(timer);
+  }, [isLoading]);
+
+  // Session Restoration (Auto-Login on Refresh)
+  useEffect(() => {
+      // We wait until we have some users loaded (or at least the admin seed)
+      if (users.length > 0) {
+          const storedUserId = localStorage.getItem('cw_lms_active_user_id');
+          const storedSessionToken = localStorage.getItem('cw_lms_session_token');
+
+          if (storedUserId && !currentUser) {
+              const foundUser = users.find(u => u.id === storedUserId);
+              
+              if (foundUser) {
+                  // Verify Session Token (Security Check)
+                  // Admins can bypass strict token checks if needed
+                  if (foundUser.sessionToken === storedSessionToken || foundUser.role === UserRole.ADMIN) {
+                      console.log("Restoring session for:", foundUser.username);
+                      setCurrentUser(foundUser);
+                  } else {
+                      console.log("Session token mismatch, clearing storage");
+                      localStorage.removeItem('cw_lms_active_user_id');
+                      localStorage.removeItem('cw_lms_session_token');
+                  }
+              }
+          }
+          
+          // Data is loaded, users are present, check is done. Stop loading.
+          setIsLoading(false);
+      }
+  }, [users, currentUser]);
+
   // Single Session Enforcement Watcher
   useEffect(() => {
       if (currentUser && users.length > 0) {
           const dbUser = users.find(u => u.id === currentUser.id);
           // If the session token in DB is different from the one in local state, force logout
           if (dbUser && dbUser.sessionToken && dbUser.sessionToken !== currentUser.sessionToken) {
-              alert("You have been logged out because this account signed in on another device.");
-              setCurrentUser(null);
+              // Only alert if we aren't currently switching (prevents double alerts)
+              if (currentUser.role !== UserRole.ADMIN) {
+                  alert("You have been logged out because this account signed in on another device.");
+                  handleLogout(); 
+              }
           }
-          // Also update local user object if roles or other details change
+          // Also update local user object if roles or other details change (but token matches)
           if (dbUser && JSON.stringify(dbUser) !== JSON.stringify(currentUser)) {
               if (dbUser.sessionToken === currentUser.sessionToken) {
                  setCurrentUser(dbUser);
@@ -70,11 +118,12 @@ const App: React.FC = () => {
           if (user.sessionToken === approvedSessionToken) {
               // The DB has synced, and the tokens match. Login allowed.
               setCurrentUser(user);
+              // Save to Storage
+              localStorage.setItem('cw_lms_active_user_id', user.id);
+              localStorage.setItem('cw_lms_session_token', user.sessionToken || '');
               return { success: true };
           } else {
               // The DB has NOT synced to this client yet. 
-              // The user.sessionToken is still the OLD one.
-              // Return a specific error to tell Login component to wait and retry.
               return { success: false, error: 'SYNC_PENDING' };
           }
       }
@@ -82,7 +131,7 @@ const App: React.FC = () => {
       // SCENARIO 2: Normal Login Attempt
 
       // Check if session exists (user already logged in somewhere)
-      // BYPASS: Admin can login anywhere immediately (overriding old session) without waiting for approval
+      // BYPASS: Admin can login anywhere immediately
       if (user.role !== UserRole.ADMIN && user.sessionToken && user.sessionToken.length > 0) {
            // Create a pending request instead of logging in
            const requestId = generateId();
@@ -110,6 +159,10 @@ const App: React.FC = () => {
       await DB.updateUser(updatedUser);
       
       setCurrentUser(updatedUser);
+      // Save to Storage
+      localStorage.setItem('cw_lms_active_user_id', updatedUser.id);
+      localStorage.setItem('cw_lms_session_token', newToken);
+
       return { success: true };
     } else {
       const userExists = users.some(u => u.username === username);
@@ -128,6 +181,9 @@ const App: React.FC = () => {
         await DB.updateUser(updated);
     }
     setCurrentUser(null);
+    // Clear Storage
+    localStorage.removeItem('cw_lms_active_user_id');
+    localStorage.removeItem('cw_lms_session_token');
   };
 
   // --- Handlers passed to Children that trigger DB calls ---
