@@ -75,7 +75,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
 
   // Handle iframe loading for YouTube and Telegram (simulated for internal state management)
   useEffect(() => {
-    if (autoPlay && (youtubeId || url.includes('t.me/') || (url.startsWith('http') && !url.match(/\.(mp4|webm|ogg|mov|m3u8|pdf|zip|rar|doc|docx|xls|xlsx|ppt|pptx)$/i))) && isLoadingVideo) {
+    if (autoPlay && (youtubeId || url.includes('t.me/') || (url.startsWith('http') && !url.match(/\.(mp4|webm|ogg|mov|m3u8|zip|rar|doc|docx|xls|xlsx|ppt|pptx)$/i))) && isLoadingVideo) {
       // Simulate loading for iframes as there's no direct 'loadeddata' event
       const timer = setTimeout(() => {
         setIsLoadingVideo(false);
@@ -142,7 +142,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
     }
 
     // Fallback Generic Iframe for other HTTP links
-    const isGenericLink = url.startsWith('http') && !url.match(/\.(pdf|zip|rar|doc|docx|xls|xlsx|ppt|pptx)$/i);
+    // Removed explicit PDF exclusion here, as PDFs are no longer specially handled by VideoPlayer
+    const isGenericLink = url.startsWith('http') && !url.match(/\.(zip|rar|doc|docx|xls|xlsx|ppt|pptx)$/i);
     if (isGenericLink) {
         return (
         <>
