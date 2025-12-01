@@ -5,12 +5,12 @@ import Hls from 'hls.js';
 interface VideoPlayerProps {
   url: string;
   title: string;
-  autoPlay?: boolean; // New prop to control autoplay
+  autoPlay?: boolean;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay = false }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // isLoadingVideo will still be managed for internal HLS/iframe logic, but no visual overlay
+  // Internal logic state only
   const [isLoadingVideo, setIsLoadingVideo] = useState(autoPlay); 
 
   // 1. YouTube Handler
@@ -24,9 +24,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
 
   // HLS.js for .m3u8 streams
   useEffect(() => {
-    if (autoPlay && videoRef.current && url.endsWith('.m3u8')) {
+    if (autoPlay && videoRef.current && url.includes('.m3u8')) {
       const video = videoRef.current;
-      setIsLoadingVideo(true); // Internal loading state for HLS
+      setIsLoadingVideo(true);
 
       if (Hls.isSupported()) {
         const hls = new Hls();
@@ -39,8 +39,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
           });
         });
         hls.on(Hls.Events.ERROR, (event, data) => {
-            console.error("HLS error:", data);
-            setIsLoadingVideo(false); 
             if (data.fatal) {
                 switch(data.type) {
                     case Hls.ErrorTypes.NETWORK_ERROR:
@@ -61,9 +59,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
           console.error("Error playing native HLS video:", e);
           setIsLoadingVideo(false);
         });
-      } else {
-        console.error('HLS is not supported in this browser.');
-        setIsLoadingVideo(false);
       }
       return () => {
         if (Hls.isSupported()) {
@@ -72,18 +67,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
       };
     }
   }, [url, autoPlay]);
-
-  // Handle iframe loading for YouTube and Telegram (simulated for internal state management)
-  useEffect(() => {
-    if (autoPlay && (youtubeId || url.includes('t.me/') || (url.startsWith('http') && !url.match(/\.(mp4|webm|ogg|mov|m3u8|zip|rar|doc|docx|xls|xlsx|ppt|pptx)$/i))) && isLoadingVideo) {
-      // Simulate loading for iframes as there's no direct 'loadeddata' event
-      const timer = setTimeout(() => {
-        setIsLoadingVideo(false);
-      }, 1500); // 1.5 seconds simulated internal loading time
-      return () => clearTimeout(timer);
-    }
-  }, [autoPlay, youtubeId, url, isLoadingVideo]);
-
 
   const renderPlayerContent = () => {
     if (youtubeId) {
@@ -119,8 +102,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
         );
     }
 
-    const isDirectVideoFile = url.match(/\.(mp4|webm|ogg|mov)$/i);
-    const isHlsStream = url.endsWith('.m3u8');
+    // UPDATED REGEX: Supports Firebase Storage URLs (which have query params like ?alt=media)
+    const isDirectVideoFile = url.match(/\.(mp4|webm|ogg|mov)(?:\?|$|#)/i);
+    const isHlsStream = url.includes('.m3u8');
 
     if (isDirectVideoFile || isHlsStream) {
       return (
@@ -131,9 +115,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
               controlsList="nodownload"
               onContextMenu={(e) => e.preventDefault()}
               preload="metadata"
-              autoPlay={autoPlay} 
-              onLoadedData={() => setIsLoadingVideo(false)} 
-              onError={() => setIsLoadingVideo(false)} 
+              autoPlay={autoPlay}
           >
               <source src={url} type={isHlsStream ? 'application/x-mpegURL' : undefined} />
               Your browser does not support the video tag.
@@ -142,8 +124,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
     }
 
     // Fallback Generic Iframe for other HTTP links
-    // Removed explicit PDF exclusion here, as PDFs are no longer specially handled by VideoPlayer
-    const isGenericLink = url.startsWith('http') && !url.match(/\.(zip|rar|doc|docx|xls|xlsx|ppt|pptx)$/i);
+    const isGenericLink = url.startsWith('http') && !url.match(/\.(pdf|zip|rar|doc|docx|xls|xlsx|ppt|pptx)(?:\?|$|#)/i);
     if (isGenericLink) {
         return (
         <>
@@ -163,7 +144,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
         );
     }
 
-    // If none of the above, show an error
     return (
         <div className="absolute inset-0 bg-red-900/50 flex flex-col items-center justify-center text-white p-4">
             <AlertCircle className="h-10 w-10 text-red-300 mb-3" />
@@ -175,7 +155,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
 
   return (
     <div className="relative w-full h-full bg-gradient-to-br from-gray-900 to-black rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10"> 
-      {/* The loading screen overlay has been removed. */}
       {renderPlayerContent()}
     </div>
   );
