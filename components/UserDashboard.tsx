@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { CourseFolder, User, AdminConfig, UserProgress, Comment, UserRole, LoginRequest, Resource } from '../types';
-import { LogOut, Folder, FileText, ExternalLink, ChevronRight, ArrowLeft, Youtube, Linkedin, Send, Instagram, CheckCircle, Search, MessageSquare, SendHorizontal, Lock, Download, MessageCircle, ShieldCheck, ShieldAlert, PlayCircle, X } from 'lucide-react';
+import { LogOut, Folder, FileText, ExternalLink, ChevronRight, ArrowLeft, Youtube, Linkedin, Send, Instagram, CheckCircle, Search, MessageSquare, SendHorizontal, Lock, Download, MessageCircle, ShieldCheck, ShieldAlert, PlayCircle, X, Play } from 'lucide-react';
 import { VideoPlayer } from './VideoPlayer';
 import * as DB from '../services/db';
 
@@ -199,12 +199,15 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   const isPlayableResource = (resource: Resource) => {
     const isTelegram = resource.url.includes('t.me');
     const isYouTube = resource.url.includes('youtube.com') || resource.url.includes('youtu.be');
-    const isHls = resource.url.includes('.m3u8');
-    const isDirectVideo = resource.type === 'VIDEO'; 
-    // Generic iframe link, explicitly excluding PDFs and other docs to force them to open as files
+    
+    // Improved detection: Check extension regardless of type
+    const hasVideoExtension = resource.url.match(/\.(mp4|webm|ogg|mov|m3u8)(?:\?|$|#)/i);
+    const isDirectVideo = resource.type === 'VIDEO' || !!hasVideoExtension;
+    
+    // Generic iframe link, explicitly excluding PDFs and other docs
     const isGenericIframe = resource.type === 'LINK' && (resource.url.startsWith('http') && !resource.url.match(/\.(pdf|zip|rar|doc|docx|xls|xlsx|ppt|pptx)(?:\?|$|#)/i));
     
-    return isTelegram || isYouTube || isHls || isDirectVideo || isGenericIframe;
+    return isTelegram || isYouTube || isDirectVideo || isGenericIframe;
   }
 
   return (
@@ -247,15 +250,30 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
       {/* Video Player Modal */}
       {selectedVideoResource && (
-          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-              <div className="relative w-full max-w-4xl max-h-full aspect-video"> 
-                  <button 
-                      onClick={() => setSelectedVideoResource(null)}
-                      className="absolute -top-10 right-0 p-2 text-white hover:text-indigo-400 transition-colors z-50"
-                  >
-                      <X className="h-8 w-8" />
-                  </button>
-                  <VideoPlayer url={selectedVideoResource.url} title={selectedVideoResource.title} autoPlay={true} />
+          <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 md:p-8 animate-fadeIn">
+              <div className="w-full max-w-6xl flex flex-col bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-800 ring-1 ring-white/10">
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between px-6 py-4 bg-gray-950 border-b border-gray-800">
+                      <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-indigo-500/10 rounded-lg">
+                              <Play className="h-5 w-5 text-indigo-400" />
+                          </div>
+                          <h3 className="text-lg font-bold text-gray-100 truncate max-w-[200px] md:max-w-md">
+                              {selectedVideoResource.title}
+                          </h3>
+                      </div>
+                      <button 
+                          onClick={() => setSelectedVideoResource(null)}
+                          className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                      >
+                          <X className="h-6 w-6" />
+                      </button>
+                  </div>
+
+                  {/* Player Container */}
+                  <div className="relative w-full aspect-video bg-black">
+                       <VideoPlayer url={selectedVideoResource.url} title={selectedVideoResource.title} autoPlay={true} />
+                  </div>
               </div>
           </div>
       )}
@@ -449,7 +467,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                 </div>
                                                             </div>
                                                         ) : (
-                                                            // Standard File/Link (Includes PDFs now)
+                                                            // Standard File/Link (Includes PDFs)
                                                             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-center hover:bg-slate-100 transition-colors">
                                                                 <div className={`p-3 rounded-lg mr-4 ${
                                                                     res.type === 'FILE' ? 'bg-blue-100 text-blue-600' : 'bg-yellow-100 text-yellow-600'
@@ -458,7 +476,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                                 </div>
                                                                 <div className="flex-1">
                                                                     <div className="text-sm text-slate-500 uppercase tracking-wider font-semibold mb-1">{res.type} Resource</div>
-                                                                    {/* Link opens in new tab (e.g. browser PDF viewer) */}
+                                                                    {/* Link opens in new tab */}
                                                                     <a href={res.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-bold hover:underline flex items-center">
                                                                         {res.title} <ExternalLink className="inline h-4 w-4 ml-2" />
                                                                     </a>

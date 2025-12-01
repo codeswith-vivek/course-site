@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { AlertCircle, ExternalLink } from 'lucide-react'; 
 import Hls from 'hls.js';
@@ -103,19 +104,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
     }
 
     // UPDATED REGEX: Supports Firebase Storage URLs (which have query params like ?alt=media)
-    const isDirectVideoFile = url.match(/\.(mp4|webm|ogg|mov)(?:\?|$|#)/i);
+    const isDirectVideoFile = url.match(/\.(mp4|webm|ogg|mov|mkv)(?:\?|$|#)/i);
     const isHlsStream = url.includes('.m3u8');
 
     if (isDirectVideoFile || isHlsStream) {
       return (
           <video
               ref={videoRef}
-              className="w-full h-full rounded-xl" 
+              className="w-full h-full" 
               controls
               controlsList="nodownload"
               onContextMenu={(e) => e.preventDefault()}
               preload="metadata"
               autoPlay={autoPlay}
+              playsInline
           >
               <source src={url} type={isHlsStream ? 'application/x-mpegURL' : undefined} />
               Your browser does not support the video tag.
@@ -136,10 +138,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
                 allowFullScreen
                 allow="autoplay"
             />
-            <div className="absolute bottom-0 left-0 w-full bg-yellow-900/90 text-yellow-100 text-xs p-2 text-center">
-                <AlertCircle className="h-3 w-3 inline mr-1" />
-                External Link Mode
-            </div>
+            {/* Removed warning banner for cleaner look */}
         </>
         );
     }
@@ -154,7 +153,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title, autoPlay =
   };
 
   return (
-    <div className="relative w-full h-full bg-gradient-to-br from-gray-900 to-black rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10"> 
+    <div className="relative w-full h-full bg-black overflow-hidden shadow-2xl"> 
       {renderPlayerContent()}
     </div>
   );
