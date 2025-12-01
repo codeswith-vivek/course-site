@@ -432,15 +432,19 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
 
                                                     <div className="pl-9">
                                                         {showAsPlayableCard ? (
+                                                            // New compact display for playable resources
                                                             <div 
                                                                 onClick={() => setSelectedVideoResource(res)}
-                                                                className="relative w-full pt-[56.25%] bg-slate-900 rounded-xl overflow-hidden cursor-pointer shadow-lg group"
+                                                                className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-center hover:bg-indigo-50 transition-colors cursor-pointer group"
                                                             >
-                                                                <div className="absolute inset-0 flex items-center justify-center bg-black/70 group-hover:bg-black/50 transition-all">
-                                                                    <PlayCircle className="h-16 w-16 text-white opacity-90 group-hover:opacity-100 transform group-hover:scale-110 transition-transform duration-300" />
+                                                                <div className="p-3 rounded-lg mr-4 bg-indigo-100 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                                    <PlayCircle className="h-6 w-6" /> {/* Smaller play icon */}
                                                                 </div>
-                                                                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white text-base font-bold truncate">
-                                                                    {res.title}
+                                                                <div className="flex-1">
+                                                                    <div className="text-sm text-slate-500 uppercase tracking-wider font-semibold mb-1">{res.type} Resource</div>
+                                                                    <span className="text-indigo-600 font-bold group-hover:text-indigo-800 transition-colors">
+                                                                        {res.title}
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         ) : (
