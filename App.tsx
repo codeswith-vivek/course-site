@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
 import UserDashboard from './components/UserDashboard';
-import { User, UserRole, AppState, CourseFolder, AdminConfig, UserProgress, Comment, LoginRequest } from './types';
+import { User, UserRole, AppState, CourseFolder, AdminConfig, UserProgress, Comment, LoginRequest, Resource } from './types';
 import { INITIAL_CONFIG, INITIAL_STATE } from './constants';
 import * as DB from './services/db';
 import { generateId } from './services/storage';
@@ -17,18 +17,23 @@ const App: React.FC = () => {
   const [config, setConfig] = useState<AdminConfig>(INITIAL_CONFIG);
   
   const [isLoading, setIsLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   // Initialization & Subscriptions
   useEffect(() => {
       const init = async () => {
           try {
+            setDbError(null);
             await DB.initializeDatabase();
-          } catch (e) {
+          } catch (e: any) {
             console.error("DB Init failed", e);
+            setDbError("Failed to connect to the database. Please check your internet connection.");
+            setIsLoading(false); 
           }
       };
       init();
 
+      // Subscribe to real-time updates
       const unsubUsers = DB.subscribeToUsers((fetchedUsers) => {
           setUsers(fetchedUsers);
       });
@@ -47,45 +52,50 @@ const App: React.FC = () => {
       };
   }, []);
 
-  // Safety Timeout: Force loading to stop after 4 seconds if DB is slow
+  // Persistent Login & Loading State Logic
   useEffect(() => {
-      const timer = setTimeout(() => {
-          if (isLoading) {
-              console.log("Forcing load completion after timeout");
-              setIsLoading(false);
-          }
-      }, 4000);
-      return () => clearTimeout(timer);
-  }, [isLoading]);
-
-  // Session Restoration (Auto-Login on Refresh)
-  useEffect(() => {
-      // We wait until we have some users loaded (or at least the admin seed)
+      // If we have users loaded, attempt to restore session
       if (users.length > 0) {
           const storedUserId = localStorage.getItem('cw_lms_active_user_id');
           const storedSessionToken = localStorage.getItem('cw_lms_session_token');
 
+          // If we are not currently logged in but have stored credentials
           if (storedUserId && !currentUser) {
               const foundUser = users.find(u => u.id === storedUserId);
               
               if (foundUser) {
-                  // Verify Session Token (Security Check)
-                  // Admins can bypass strict token checks if needed
+                  // Security Check: Token must match (unless Admin)
                   if (foundUser.sessionToken === storedSessionToken || foundUser.role === UserRole.ADMIN) {
                       console.log("Restoring session for:", foundUser.username);
                       setCurrentUser(foundUser);
                   } else {
-                      console.log("Session token mismatch, clearing storage");
+                      console.log("Session expired or invalid token.");
+                      // Don't clear immediately to avoid loops, just don't log in
+                      // Ideally clear storage here
                       localStorage.removeItem('cw_lms_active_user_id');
                       localStorage.removeItem('cw_lms_session_token');
                   }
               }
           }
           
-          // Data is loaded, users are present, check is done. Stop loading.
+          // Data is loaded. Stop loading screen.
+          setIsLoading(false);
+      } else if (dbError) {
+          // If error occurred, stop loading to show error
           setIsLoading(false);
       }
-  }, [users, currentUser]);
+  }, [users, currentUser, dbError]);
+
+  // Safety Timeout: Force loading to stop after 6 seconds if DB is extremely slow
+  useEffect(() => {
+      const timer = setTimeout(() => {
+          if (isLoading) {
+              console.log("Forcing load completion after timeout (6s)");
+              setIsLoading(false);
+          }
+      }, 6000);
+      return () => clearTimeout(timer);
+  }, [isLoading]);
 
   // Single Session Enforcement Watcher
   useEffect(() => {
@@ -113,12 +123,11 @@ const App: React.FC = () => {
     const user = users.find(u => u.username === username && u.password === password);
 
     if (user) {
-      // SCENARIO 1: We have been approved via a Request
+      // SCENARIO 1: We have been approved via a Request (Recursing from Login component)
       if (approvedSessionToken) {
           if (user.sessionToken === approvedSessionToken) {
               // The DB has synced, and the tokens match. Login allowed.
               setCurrentUser(user);
-              // Save to Storage
               localStorage.setItem('cw_lms_active_user_id', user.id);
               localStorage.setItem('cw_lms_session_token', user.sessionToken || '');
               return { success: true };
@@ -186,9 +195,8 @@ const App: React.FC = () => {
     localStorage.removeItem('cw_lms_session_token');
   };
 
-  // --- Handlers passed to Children that trigger DB calls ---
+  // --- Handlers passed to Children ---
 
-  // DB Backup
   const handleBackup = async () => {
       const json = await DB.backupDatabase();
       const blob = new Blob([json], { type: 'application/json' });
@@ -208,12 +216,31 @@ const App: React.FC = () => {
       await DB.factoryReset();
   };
 
+  const handleAddMultipleResources = async (folderId: string, resources: Resource[]) => {
+      await DB.addMultipleResourcesToFolder(folderId, resources);
+  };
+
 
   if (isLoading) {
       return (
           <div className="min-h-screen bg-black flex flex-col items-center justify-center text-green-500 font-mono">
               <div className="animate-pulse text-2xl mb-4">INITIALIZING SYSTEM...</div>
               <div className="text-xs text-gray-500">Connecting to Firebase Cloud</div>
+          </div>
+      );
+  }
+
+  if (dbError) {
+      return (
+          <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-6 text-center">
+              <h2 className="text-xl font-bold text-red-500 mb-2">System Error</h2>
+              <p className="text-gray-400 mb-6">{dbError}</p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="px-6 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                  Retry Connection
+              </button>
           </div>
       );
   }
@@ -237,6 +264,7 @@ const App: React.FC = () => {
         onAddFolder={DB.addFolder}
         onUpdateFolder={DB.updateFolder}
         onDeleteFolder={DB.deleteFolder}
+        onAddMultipleResources={handleAddMultipleResources} // Pass the new handler
         
         onUpdateConfig={DB.updateConfig}
         onDeleteComment={DB.deleteComment}

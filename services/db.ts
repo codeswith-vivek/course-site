@@ -1,8 +1,7 @@
-
 import { db, storage } from './firebase';
 import { collection, doc, setDoc, deleteDoc, updateDoc, onSnapshot, query, getDocs, where, orderBy } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { AppState, User, CourseFolder, AdminConfig, UserProgress, Comment, UserRole, LoginRequest } from '../types';
+import { AppState, User, CourseFolder, AdminConfig, UserProgress, Comment, UserRole, LoginRequest, Resource } from '../types';
 import { INITIAL_CONFIG, DEFAULT_ADMIN, INITIAL_FOLDERS } from '../constants';
 
 // Collection References
@@ -18,22 +17,27 @@ const CONFIG_DOC_ID = 'main_config';
 
 export const initializeDatabase = async () => {
     // Check if config exists, if not, seed database
-    const configRef = doc(db, SETTINGS_COL, CONFIG_DOC_ID);
-    const configSnap = await getDocs(query(collection(db, SETTINGS_COL)));
+    try {
+        const configRef = doc(db, SETTINGS_COL, CONFIG_DOC_ID);
+        const configSnap = await getDocs(query(collection(db, SETTINGS_COL)));
 
-    if (configSnap.empty) {
-        console.log("Seeding Database...");
-        
-        // Seed Config
-        await setDoc(configRef, INITIAL_CONFIG);
+        if (configSnap.empty) {
+            console.log("Seeding Database...");
+            
+            // Seed Config
+            await setDoc(configRef, INITIAL_CONFIG);
 
-        // Seed Admin
-        await setDoc(doc(db, USERS_COL, DEFAULT_ADMIN.id), DEFAULT_ADMIN);
+            // Seed Admin
+            await setDoc(doc(db, USERS_COL, DEFAULT_ADMIN.id), DEFAULT_ADMIN);
 
-        // Seed Initial Folder
-        for (const folder of INITIAL_FOLDERS) {
-            await setDoc(doc(db, FOLDERS_COL, folder.id), folder);
+            // Seed Initial Folder
+            for (const folder of INITIAL_FOLDERS) {
+                await setDoc(doc(db, FOLDERS_COL, folder.id), folder);
+            }
         }
+    } catch (e) {
+        console.error("Initialization Error:", e);
+        throw e;
     }
 };
 
@@ -43,28 +47,28 @@ export const subscribeToUsers = (callback: (users: User[]) => void) => {
     return onSnapshot(collection(db, USERS_COL), (snapshot) => {
         const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
         callback(users);
-    });
+    }, (error) => console.error("Users Sync Error:", error));
 };
 
 export const subscribeToFolders = (callback: (folders: CourseFolder[]) => void) => {
     return onSnapshot(collection(db, FOLDERS_COL), (snapshot) => {
         const folders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CourseFolder));
         callback(folders);
-    });
+    }, (error) => console.error("Folders Sync Error:", error));
 };
 
 export const subscribeToComments = (callback: (comments: Comment[]) => void) => {
     return onSnapshot(collection(db, COMMENTS_COL), (snapshot) => {
         const comments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
         callback(comments);
-    });
+    }, (error) => console.error("Comments Sync Error:", error));
 };
 
 export const subscribeToProgress = (callback: (progress: UserProgress[]) => void) => {
     return onSnapshot(collection(db, PROGRESS_COL), (snapshot) => {
         const progress = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProgress));
         callback(progress);
-    });
+    }, (error) => console.error("Progress Sync Error:", error));
 };
 
 export const subscribeToConfig = (callback: (config: AdminConfig) => void) => {
@@ -72,7 +76,7 @@ export const subscribeToConfig = (callback: (config: AdminConfig) => void) => {
         if (docSnap.exists()) {
             callback(docSnap.data() as AdminConfig);
         }
-    });
+    }, (error) => console.error("Config Sync Error:", error));
 };
 
 // Listen to a specific login request (For the Login Screen waiting)
@@ -83,7 +87,7 @@ export const subscribeToLoginRequest = (requestId: string, callback: (req: Login
         } else {
             callback(null);
         }
-    });
+    }, (error) => console.error("Login Request Sync Error:", error));
 };
 
 // Listen to ALL pending requests (For Admin)
@@ -92,7 +96,7 @@ export const subscribeToAllLoginRequests = (callback: (reqs: LoginRequest[]) => 
     return onSnapshot(q, (snapshot) => {
         const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoginRequest));
         callback(reqs);
-    });
+    }, (error) => console.error("All Requests Sync Error:", error));
 };
 
 // Listen to pending requests for a specific user (For User Dashboard)
@@ -101,7 +105,7 @@ export const subscribeToUserLoginRequests = (userId: string, callback: (reqs: Lo
     return onSnapshot(q, (snapshot) => {
         const reqs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoginRequest));
         callback(reqs);
-    });
+    }, (error) => console.error("User Requests Sync Error:", error));
 };
 
 // --- CRUD Operations ---
@@ -124,6 +128,21 @@ export const addFolder = async (folder: CourseFolder) => {
 
 export const updateFolder = async (folder: CourseFolder) => {
     await updateDoc(doc(db, FOLDERS_COL, folder.id), { ...folder });
+};
+
+// New function to add multiple resources to an existing folder
+export const addMultipleResourcesToFolder = async (folderId: string, newResources: Resource[]) => {
+    const folderRef = doc(db, FOLDERS_COL, folderId);
+    // Fetch the current folder to get existing resources
+    const folderSnap = await getDocs(query(collection(db, FOLDERS_COL), where("id", "==", folderId)));
+
+    if (!folderSnap.empty) {
+        const currentFolder = folderSnap.docs[0].data() as CourseFolder;
+        const updatedResources = [...currentFolder.resources, ...newResources];
+        await updateDoc(folderRef, { resources: updatedResources });
+    } else {
+        throw new Error(`Folder with ID ${folderId} not found.`);
+    }
 };
 
 export const deleteFolder = async (folderId: string) => {

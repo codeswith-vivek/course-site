@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CourseFolder, AdminConfig, UserRole, Resource, Comment, AppState, Reply, LoginRequest } from '../types';
 import { generateId } from '../services/storage';
-import { LayoutDashboard, Users, FolderPlus, Settings, LogOut, Trash2, UserPlus, Shield, Activity, Link as LinkIcon, FileText, MessageSquare, XCircle, ChevronRight, Key, Check, X, Lock, Unlock, Database, Download, Upload, AlertTriangle, Menu, Edit, Reply as ReplyIcon, Send, Bell, Loader } from 'lucide-react';
+import { LayoutDashboard, Users, FolderPlus, Settings, LogOut, Trash2, UserPlus, Shield, Activity, Link as LinkIcon, FileText, MessageSquare, XCircle, ChevronRight, Key, Check, X, Lock, Unlock, Database, Download, Upload, AlertTriangle, Menu, Edit, Reply as ReplyIcon, Send, Bell, Loader, PlayCircle, PlusCircle } from 'lucide-react';
 import { MOCK_ONLINE_USERS_BASE } from '../constants';
 import * as DB from '../services/db';
 
@@ -20,6 +19,7 @@ interface AdminPanelProps {
   onAddFolder: (folder: CourseFolder) => void;
   onUpdateFolder: (folder: CourseFolder) => void;
   onDeleteFolder: (folderId: string) => void;
+  onAddMultipleResources: (folderId: string, resources: Resource[]) => Promise<void>; // New prop
   
   onUpdateConfig: (config: AdminConfig) => void;
   onDeleteComment?: (commentId: string) => void;
@@ -43,6 +43,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   onAddFolder,
   onUpdateFolder,
   onDeleteFolder,
+  onAddMultipleResources, // New prop
   onUpdateConfig,
   onDeleteComment,
   onUpdateComment,
@@ -159,7 +160,139 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [inputType, setInputType] = useState<'URL' | 'FILE'>('URL');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  
+
+  // Batch Upload State
+  const [showBatchUploadModal, setShowBatchUploadModal] = useState(false);
+  const [batchUploadFiles, setBatchUploadFiles] = useState<File[]>([]);
+  const [batchTxtFile, setBatchTxtFile] = useState<File | null>(null);
+  const [batchUploadTotalProgress, setBatchUploadTotalProgress] = useState(0);
+  const [isBatchUploading, setIsBatchUploading] = useState(false);
+  const [parsedTxtLinks, setParsedTxtLinks] = useState<Resource[]>([]);
+
+  const handleBatchFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+          setBatchUploadFiles(Array.from(e.target.files));
+      }
+  };
+
+  const handleTxtFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+          const file = e.target.files[0];
+          setBatchTxtFile(file);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+              const content = event.target?.result as string;
+              parseTxtForLinks(content);
+          };
+          reader.readAsText(file);
+      } else {
+          setBatchTxtFile(null);
+          setParsedTxtLinks([]);
+      }
+  };
+
+  const parseTxtForLinks = (content: string) => {
+      const lines = content.split('\n');
+      const detectedResources: Resource[] = [];
+      const m3u8Regex = /^(https?:\/\/.+\.m3u8(\?.+)?)$/i;
+      const pdfRegex = /^(https?:\/\/.+\.pdf(\?.+)?)$/i;
+      const genericUrlRegex = /^(https?:\/\/[^\s$.?#].[^\s]*)$/i; // More general URL regex
+
+      lines.forEach(line => {
+          const trimmedLine = line.trim();
+          if (trimmedLine) {
+              let type: Resource['type'] = 'LINK'; // Default to LINK
+              let title = trimmedLine; // Default title is the link itself
+
+              if (m3u8Regex.test(trimmedLine)) {
+                  type = 'VIDEO';
+                  title = `HLS Stream - ${trimmedLine.split('/').pop()?.split('?')[0] || 'Unknown'}`;
+              } else if (pdfRegex.test(trimmedLine)) {
+                  type = 'FILE';
+                  title = `PDF Document - ${trimmedLine.split('/').pop()?.split('?')[0] || 'Unknown'}`;
+              } else if (genericUrlRegex.test(trimmedLine)) {
+                  // Try to get a better title for generic URLs
+                  try {
+                      const urlObj = new URL(trimmedLine);
+                      title = urlObj.hostname + urlObj.pathname.split('/').pop();
+                      if (title.length > 50) title = trimmedLine; // Fallback to full URL if too long
+                  } catch {}
+              }
+
+              detectedResources.push({
+                  id: generateId(),
+                  title: title,
+                  type: type,
+                  url: trimmedLine,
+              });
+          }
+      });
+      setParsedTxtLinks(detectedResources);
+  };
+
+
+  const handleBatchAddResources = async () => {
+      if (!selectedFolderId) {
+          alert("Please select a course folder first.");
+          return;
+      }
+      setIsBatchUploading(true);
+      setBatchUploadTotalProgress(0);
+
+      const newResources: Resource[] = [];
+      let uploadedCount = 0;
+      const totalItemsToUpload = batchUploadFiles.length;
+
+      // 1. Upload files
+      for (const file of batchUploadFiles) {
+          try {
+              const url = await DB.uploadResourceFile(file, selectedFolderId, (progress) => {
+                  setBatchUploadTotalProgress(((uploadedCount + progress / 100) / totalItemsToUpload) * 100);
+              });
+              
+              let type: Resource['type'];
+              if (file.type.startsWith('video/')) type = 'VIDEO';
+              else if (file.type === 'application/pdf') type = 'FILE';
+              else type = 'FILE'; // Default for other files
+
+              newResources.push({
+                  id: generateId(),
+                  title: file.name,
+                  type: type,
+                  url: url,
+              });
+              uploadedCount++;
+          } catch (error) {
+              console.error(`Failed to upload ${file.name}:`, error);
+              // Handle error for this file, but continue with others
+          }
+      }
+
+      // 2. Add parsed TXT links
+      newResources.push(...parsedTxtLinks);
+
+      // 3. Save all resources to folder
+      if (newResources.length > 0) {
+          try {
+              await onAddMultipleResources(selectedFolderId, newResources);
+              alert(`${newResources.length} resources added successfully!`);
+              setShowBatchUploadModal(false);
+              setBatchUploadFiles([]);
+              setBatchTxtFile(null);
+              setParsedTxtLinks([]);
+          } catch (error) {
+              console.error("Error adding multiple resources to folder:", error);
+              alert("Failed to add resources to folder. Check console for details.");
+          }
+      } else {
+          alert("No files uploaded or links parsed to add.");
+      }
+
+      setIsBatchUploading(false);
+      setBatchUploadTotalProgress(0);
+  };
+
+
   // Comment Reply State
   const [replyText, setReplyText] = useState<{[key: string]: string}>({});
 
@@ -219,8 +352,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           // Auto-detect type
           if (file.type.startsWith('video/')) {
               setResType('VIDEO');
-          } else {
+          } else if (file.type === 'application/pdf') {
               setResType('FILE');
+          } else {
+              setResType('FILE'); // Default for other files
           }
           
           if (!resTitle) {
@@ -872,13 +1007,21 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                                         )}
                                     </div>
                                 </div>
+                                {/* Batch Upload Button */}
+                                <button 
+                                    onClick={() => setShowBatchUploadModal(true)}
+                                    disabled={!selectedFolderId}
+                                    className="w-full flex items-center justify-center px-4 py-2 bg-blue-900/20 text-blue-400 border border-blue-900/50 hover:bg-blue-900/40 rounded-lg text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <PlusCircle className="h-4 w-4 mr-2" /> Batch Add Resources
+                                </button>
 
-                                <div className="space-y-2 mb-8">
+                                <div className="space-y-2 mb-8 mt-8">
                                     <h4 className="text-sm font-bold text-gray-400 mb-2">Current Resources</h4>
                                     {folders.find(f => f.id === selectedFolderId)?.resources.map((res) => (
                                         <div key={res.id} className="flex items-center justify-between p-3 bg-black/50 border border-gray-800 rounded hover:border-gray-600">
                                             <div className="flex items-center overflow-hidden mr-2">
-                                                {res.type === 'VIDEO' && <Activity className="h-4 w-4 mr-3 text-purple-500 flex-shrink-0"/>}
+                                                {res.type === 'VIDEO' && <PlayCircle className="h-4 w-4 mr-3 text-purple-500 flex-shrink-0"/>}
                                                 {res.type === 'FILE' && <FileText className="h-4 w-4 mr-3 text-blue-500 flex-shrink-0"/>}
                                                 {res.type === 'LINK' && <LinkIcon className="h-4 w-4 mr-3 text-yellow-500 flex-shrink-0"/>}
                                                 <div className="text-sm font-medium text-gray-200 truncate">{res.title}</div>
@@ -1057,6 +1200,75 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             )}
         </div>
       </main>
+
+      {/* Batch Upload Modal */}
+      {showBatchUploadModal && selectedFolderId && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+              <div className="bg-[#111] border border-gray-700 rounded-xl w-full max-w-2xl shadow-2xl">
+                  <div className="p-6 border-b border-gray-800 flex justify-between items-center">
+                      <h3 className="text-xl font-bold text-white">Batch Add Resources to {folders.find(f => f.id === selectedFolderId)?.name}</h3>
+                      <button onClick={() => setShowBatchUploadModal(false)} className="text-gray-500 hover:text-white">
+                          <X className="h-6 w-6" />
+                      </button>
+                  </div>
+                  <div className="p-6 space-y-6">
+                      <div>
+                          <label className="block text-sm text-gray-400 mb-2">Upload Multiple Files (Video, PDF, etc.)</label>
+                          <input 
+                              type="file"
+                              multiple
+                              onChange={handleBatchFileChange}
+                              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-hacker-green outline-none"
+                              disabled={isBatchUploading}
+                          />
+                          {batchUploadFiles.length > 0 && (
+                            <p className="text-xs text-gray-500 mt-2">{batchUploadFiles.length} files selected.</p>
+                          )}
+                      </div>
+                      <div>
+                          <label className="block text-sm text-gray-400 mb-2">Upload .TXT file to parse links (m3u8, pdf)</label>
+                          <input 
+                              type="file"
+                              accept=".txt"
+                              onChange={handleTxtFileChange}
+                              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-hacker-green outline-none"
+                              disabled={isBatchUploading}
+                          />
+                          {batchTxtFile && (
+                            <p className="text-xs text-gray-500 mt-2">1 TXT file selected ({batchTxtFile.name}).</p>
+                          )}
+                          {parsedTxtLinks.length > 0 && (
+                            <div className="text-xs text-hacker-green mt-2">Detected {parsedTxtLinks.length} links from TXT.</div>
+                          )}
+                      </div>
+
+                      {isBatchUploading && (
+                          <div className="w-full bg-gray-800 rounded-full h-3">
+                              <div className="bg-hacker-green h-3 rounded-full transition-all duration-300" style={{ width: `${batchUploadTotalProgress}%` }}></div>
+                          </div>
+                      )}
+
+                      <div className="pt-4 flex justify-end space-x-3">
+                          <button 
+                              onClick={() => setShowBatchUploadModal(false)}
+                              className="px-4 py-2 rounded text-gray-400 hover:text-white"
+                              disabled={isBatchUploading}
+                          >
+                              Cancel
+                          </button>
+                          <button 
+                              onClick={handleBatchAddResources}
+                              className="px-6 py-2 bg-hacker-green text-black font-bold rounded hover:bg-green-400"
+                              disabled={isBatchUploading || (batchUploadFiles.length === 0 && parsedTxtLinks.length === 0)}
+                          >
+                              {isBatchUploading ? <Loader className="h-4 w-4 animate-spin mr-2 inline" /> : null}
+                              {isBatchUploading ? `Uploading (${Math.round(batchUploadTotalProgress)}%)` : `Add All (${batchUploadFiles.length + parsedTxtLinks.length})`}
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

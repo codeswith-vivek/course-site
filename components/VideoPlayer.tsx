@@ -1,6 +1,6 @@
-
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { AlertCircle, ExternalLink } from 'lucide-react';
+import Hls from 'hls.js'; // Import hls.js
 
 interface VideoPlayerProps {
   url: string;
@@ -8,6 +8,52 @@ interface VideoPlayerProps {
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // HLS.js for .m3u8 streams
+  useEffect(() => {
+    if (videoRef.current && url.endsWith('.m3u8')) {
+      const video = videoRef.current;
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(e => console.error("Error playing HLS video:", e));
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+            console.error("HLS error:", data);
+            // Attempt to recover from certain errors
+            if (data.fatal) {
+                switch(data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        hls.startLoad();
+                        break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        hls.recoverMediaError();
+                        break;
+                    default:
+                        hls.destroy();
+                        break;
+                }
+            }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari, iOS)
+        video.src = url;
+        video.play().catch(e => console.error("Error playing native HLS video:", e));
+      } else {
+        console.error('HLS is not supported in this browser.');
+      }
+      return () => {
+        if (Hls.isSupported()) {
+          (video as any).hls?.destroy(); // Clean up Hls.js instance
+        }
+      };
+    }
+  }, [url]);
+
+
   // 1. YouTube Handler
   const getYoutubeId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -57,20 +103,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, title }) => {
       );
   }
 
-  // 3. Direct Video File Handler
-  const isVideoFile = url.match(/\.(mp4|webm|ogg|mov)$/i);
+  // 3. Direct Video File Handler (.mp4, .webm, .ogg, .mov, .m3u8)
+  const isDirectVideoFile = url.match(/\.(mp4|webm|ogg|mov)$/i);
+  const isHlsStream = url.endsWith('.m3u8');
 
-  if (isVideoFile) {
+  if (isDirectVideoFile || isHlsStream) {
     return (
         <div className="relative w-full rounded-xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10 group">
         <video 
+            ref={videoRef} // Attach ref for HLS.js
             className="w-full h-auto max-h-[600px]"
             controls 
             controlsList="nodownload" // Hint to browser to hide download button
             onContextMenu={(e) => e.preventDefault()} // Disable right click menu
             preload="metadata"
         >
-            <source src={url} />
+            <source src={url} type={isHlsStream ? 'application/x-mpegURL' : undefined} />
             Your browser does not support the video tag.
         </video>
         </div>
