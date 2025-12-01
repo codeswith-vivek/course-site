@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, CourseFolder, AdminConfig, UserRole, Resource, Comment, AppState, Reply, LoginRequest } from '../types';
 import { generateId } from '../services/storage';
-import { LayoutDashboard, Users, FolderPlus, Settings, LogOut, Trash2, UserPlus, Shield, Activity, Link as LinkIcon, FileText, MessageSquare, XCircle, ChevronRight, Key, Check, X, Lock, Unlock, Database, Download, Upload, AlertTriangle, Menu, Edit, Reply as ReplyIcon, Send, Bell, Loader, PlayCircle, PlusCircle } from 'lucide-react';
+import { LayoutDashboard, Users, FolderPlus, Settings, LogOut, Trash2, UserPlus, Shield, Activity, Link as LinkIcon, FileText, MessageSquare, XCircle, ChevronRight, Key, Check, X, Lock, Unlock, Database, Download, Upload, AlertTriangle, Menu, Edit, Reply as ReplyIcon, Send, Bell, Loader, PlayCircle, PlusCircle, Globe } from 'lucide-react'; // Added Globe icon
 import { MOCK_ONLINE_USERS_BASE } from '../constants';
 import * as DB from '../services/db';
 
@@ -1115,6 +1116,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         <h3 className="text-xl font-bold mb-6 text-white">System Configuration</h3>
                         <div className="space-y-6">
                             <div className="space-y-4">
+                                <h4 className="text-sm font-bold text-hacker-green uppercase tracking-wider mb-2">General</h4>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1 ml-1">Site Name (e.g., CodeWith-Vivek)</label>
+                                    <input 
+                                        type="text"
+                                        value={config.siteName}
+                                        onChange={(e) => onUpdateConfig({ ...config, siteName: e.target.value })}
+                                        className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-3 text-white focus:border-hacker-green outline-none"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-4 pt-4 border-t border-gray-800">
                                 <h4 className="text-sm font-bold text-hacker-green uppercase tracking-wider mb-2">Social Links</h4>
                                 {[
                                     { key: 'instagram', label: 'Instagram URL' },

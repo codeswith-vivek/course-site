@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   USER = 'USER',
@@ -59,6 +60,7 @@ export interface AdminConfig {
   linkedin: string;
   contactInfo: string;
   joinLink: string;
+  siteName: string; // New: Site name configurable by admin
 }
 
 export interface LoginRequest {

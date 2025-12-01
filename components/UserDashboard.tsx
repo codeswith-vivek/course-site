@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { CourseFolder, User, AdminConfig, UserProgress, Comment, UserRole, LoginRequest } from '../types';
 import { LogOut, Folder, FileText, ExternalLink, ChevronRight, ArrowLeft, Youtube, Linkedin, Send, Instagram, CheckCircle, Search, MessageSquare, SendHorizontal, Lock, Download, MessageCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
@@ -236,7 +237,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                     CV
                 </div>
                 <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 hidden md:block">
-                    codewith-vivek
+                    {config.siteName} {/* Dynamic site name */}
                 </span>
             </div>
 
@@ -520,7 +521,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
             <div className="flex flex-col md:flex-row justify-between items-center">
                 <div className="mb-6 md:mb-0 text-center md:text-left">
                     <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 mb-2">
-                        CodeWith-Vivek
+                        {config.siteName} {/* Dynamic site name in footer */}
                     </h3>
                     <p className="text-slate-400 text-sm max-w-md">
                         {config.contactInfo}

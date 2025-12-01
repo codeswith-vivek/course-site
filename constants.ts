@@ -16,6 +16,7 @@ export const INITIAL_CONFIG: AdminConfig = {
   linkedin: '',
   contactInfo: 'Email: contact@codewithvivek.com | Location: India',
   joinLink: 'https://t.me/codewithvivek',
+  siteName: 'CodeWith-Vivek', // New default site name
 };
 
 export const INITIAL_FOLDERS: CourseFolder[] = [
