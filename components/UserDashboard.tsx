@@ -1,8 +1,6 @@
-
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { CourseFolder, User, AdminConfig, UserProgress, Comment, UserRole, LoginRequest } from '../types';
-import { LogOut, Folder, FileText, ExternalLink, ChevronRight, ArrowLeft, Youtube, Linkedin, Send, Instagram, CheckCircle, Search, MessageSquare, SendHorizontal, Lock, Download, MessageCircle, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { CourseFolder, User, AdminConfig, UserProgress, Comment, UserRole, LoginRequest, Resource } from '../types';
+import { LogOut, Folder, FileText, ExternalLink, ChevronRight, ArrowLeft, Youtube, Linkedin, Send, Instagram, CheckCircle, Search, MessageSquare, SendHorizontal, Lock, Download, MessageCircle, ShieldCheck, ShieldAlert, PlayCircle, X } from 'lucide-react';
 import { VideoPlayer } from './VideoPlayer';
 import * as DB from '../services/db';
 
@@ -86,6 +84,10 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
   
   // Login Request Alerts
   const [loginRequests, setLoginRequests] = useState<LoginRequest[]>([]);
+
+  // Video Player Modal State
+  const [selectedVideoResource, setSelectedVideoResource] = useState<Resource | null>(null);
+
 
   useEffect(() => {
       // Listen for people trying to hack this account
@@ -192,6 +194,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
       );
   };
 
+  // Helper to determine if a resource is playable in VideoPlayer (opens modal)
+  const isPlayableResource = (resource: Resource) => {
+    const isTelegram = resource.url.includes('t.me');
+    const isYouTube = resource.url.includes('youtube.com') || resource.url.includes('youtu.be');
+    const isHls = resource.url.endsWith('.m3u8');
+    const isDirectVideo = resource.type === 'VIDEO'; // Or could check for .mp4, .webm etc.
+    // A generic link that's not a known downloadable file type (e.g., PDF)
+    const isGenericIframe = resource.type === 'LINK' && (resource.url.startsWith('http') && !resource.url.match(/\.(pdf|zip|rar|doc|docx|xls|xlsx|ppt|pptx)$/i));
+    
+    return isTelegram || isYouTube || isHls || isDirectVideo || isGenericIframe;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans relative">
       
@@ -226,6 +240,21 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                           </button>
                       </div>
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* Video Player Modal */}
+      {selectedVideoResource && (
+          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+              <div className="relative w-full max-w-4xl max-h-full aspect-video"> {/* Added aspect-video */}
+                  <button 
+                      onClick={() => setSelectedVideoResource(null)}
+                      className="absolute -top-10 right-0 p-2 text-white hover:text-indigo-400 transition-colors z-50"
+                  >
+                      <X className="h-8 w-8" />
+                  </button>
+                  <VideoPlayer url={selectedVideoResource.url} title={selectedVideoResource.title} autoPlay={true} />
               </div>
           </div>
       )}
@@ -373,10 +402,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                     <div className="space-y-8">
                                         {activeFolder.resources.map((res) => {
                                             const isCompleted = progress?.completedResourceIds.includes(res.id);
-                                            // Detect Telegram Links to treat them as Embeds
-                                            const isTelegram = res.url.includes('t.me');
-                                            const isVideo = res.type === 'VIDEO';
-                                            const showPlayer = isVideo || isTelegram;
+                                            // Determine if this resource should open the video player modal
+                                            const showAsPlayableCard = isPlayableResource(res);
 
                                             return (
                                                 <div key={res.id} className="border-b border-slate-100 pb-6 last:border-0">
@@ -391,7 +418,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                             {res.title}
                                                         </h3>
                                                         
-                                                        {res.type === 'FILE' && !isTelegram && (
+                                                        {res.type === 'FILE' && !showAsPlayableCard && (
                                                             <a 
                                                                 href={res.url} 
                                                                 download
@@ -404,8 +431,18 @@ const UserDashboard: React.FC<UserDashboardProps> = ({
                                                     </div>
 
                                                     <div className="pl-9">
-                                                        {showPlayer ? (
-                                                            <VideoPlayer url={res.url} title={res.title} />
+                                                        {showAsPlayableCard ? (
+                                                            <div 
+                                                                onClick={() => setSelectedVideoResource(res)}
+                                                                className="relative w-full pt-[56.25%] bg-slate-900 rounded-xl overflow-hidden cursor-pointer shadow-lg group"
+                                                            >
+                                                                <div className="absolute inset-0 flex items-center justify-center bg-black/70 group-hover:bg-black/50 transition-all">
+                                                                    <PlayCircle className="h-16 w-16 text-white opacity-90 group-hover:opacity-100 transform group-hover:scale-110 transition-transform duration-300" />
+                                                                </div>
+                                                                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white text-base font-bold truncate">
+                                                                    {res.title}
+                                                                </div>
+                                                            </div>
                                                         ) : (
                                                             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 flex items-center hover:bg-slate-100 transition-colors">
                                                                 <div className={`p-3 rounded-lg mr-4 ${
